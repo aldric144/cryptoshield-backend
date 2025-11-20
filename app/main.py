@@ -49,12 +49,14 @@ def get_cors_origins() -> List[str]:
     if env == "production":
         return [
             "https://cryptoshield.app",
-            "https://www.cryptoshield.app"
+            "https://www.cryptoshield.app",
+            "https://cryptoshield-frontend.onrender.com"
         ]
     elif env == "staging":
         return [
             "https://staging.cryptoshield.app",
             "https://cryptoshield-frontend-staging.vercel.app",
+            "https://cryptoshield-frontend.onrender.com",
             "http://localhost:5173",
             "http://localhost:3000"
         ]
