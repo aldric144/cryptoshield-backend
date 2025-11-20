@@ -39,9 +39,36 @@ logger = logging.getLogger("finalize_case")
 
 app = FastAPI(title="CryptoShield Guardian AI API", version="1.0.0")
 
+import os
+from typing import List
+
+def get_cors_origins() -> List[str]:
+    """Get CORS allowed origins from environment variable or use defaults"""
+    env = os.getenv("ENV", "development")
+    
+    if env == "production":
+        return [
+            "https://cryptoshield.app",
+            "https://www.cryptoshield.app"
+        ]
+    elif env == "staging":
+        return [
+            "https://staging.cryptoshield.app",
+            "https://cryptoshield-frontend-staging.vercel.app",
+            "http://localhost:5173",
+            "http://localhost:3000"
+        ]
+    else:  # development
+        return [
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:3000"
+        ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,6 +81,18 @@ gps_shield = GPSAntiScamShield(db)
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok", "service": "CryptoShield Guardian AI"}
+
+@app.get("/health")
+async def health():
+    """Health check endpoint for Fly.io and monitoring systems"""
+    env = os.getenv("ENV", "development")
+    return {
+        "status": "healthy",
+        "service": "CryptoShield Guardian AI",
+        "version": "1.0.0",
+        "environment": env,
+        "timestamp": datetime.now().isoformat()
+    }
 
 
 @app.post("/api/users", response_model=User)
