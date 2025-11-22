@@ -231,3 +231,20 @@ class CancelSubscriptionRequest(BaseModel):
 class CancelSubscriptionResponse(BaseModel):
     success: bool
     message: str
+
+class AnalyzeTextRequest(BaseModel):
+    call_id: Optional[str] = None
+    user_id: Optional[str] = None
+    text: Optional[str] = None
+    audio_text: Optional[str] = None
+
+class AnalyzeTextResponse(BaseModel):
+    scam_probability: float
+    emotional_tone: dict
+    manipulation_timeline: list
+    dark_patterns: list
+    predicted_region: str
+    threat_level: str
+    scammer_profile: dict
+    suggested_action: str
+    raw: dict

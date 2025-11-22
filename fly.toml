@@ -1,0 +1,72 @@
+# CryptoShield Guardian AI - Backend Fly.io Configuration
+# This file configures the Fly.io deployment for staging and production
+
+app = "cryptoshield-backend-staging"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ENV = "staging"
+  API_HOST = "0.0.0.0"
+  API_PORT = "8000"
+  LOG_LEVEL = "INFO"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8000
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.tcp_checks]]
+    grace_period = "10s"
+    interval = "30s"
+    restart_limit = 0
+    timeout = "5s"
+
+  [[services.http_checks]]
+    interval = "30s"
+    grace_period = "10s"
+    method = "get"
+    path = "/health"
+    protocol = "http"
+    timeout = "5s"
+    tls_skip_verify = false
+
+[mounts]
+  source = "cryptoshield_data"
+  destination = "/data"
+
+# Note: For production deployment, change:
+# - app = "cryptoshield-backend-production"
+# - ENV = "production"
+# - min_machines_running = 2 (for high availability)

@@ -16,7 +16,8 @@ from app.models import (
     ReportGenerationRequest, RiskLevel, ScamScriptType,
     SubscriptionTier, SubscriptionCheckRequest, SubscriptionCheckResponse,
     CreateSubscriptionRequest, CreateSubscriptionResponse,
-    CancelSubscriptionRequest, CancelSubscriptionResponse
+    CancelSubscriptionRequest, CancelSubscriptionResponse,
+    AnalyzeTextRequest, AnalyzeTextResponse
 )
 from app.database import db
 from app.ai_services import (
@@ -39,9 +40,41 @@ logger = logging.getLogger("finalize_case")
 
 app = FastAPI(title="CryptoShield Guardian AI API", version="1.0.0")
 
+import os
+from typing import List
+
+def get_cors_origins() -> List[str]:
+    """Get CORS allowed origins from environment variable or use defaults"""
+    env = os.getenv("ENV", "development")
+    
+    if env == "production":
+        return [
+            "https://cryptoshield.app",
+            "https://www.cryptoshield.app",
+            "https://cryptoshield-frontend.onrender.com",
+            "https://cryptoshield-backend-i83o.onrender.com"
+        ]
+    elif env == "staging":
+        return [
+            "https://staging.cryptoshield.app",
+            "https://cryptoshield-frontend-staging.vercel.app",
+            "https://cryptoshield-frontend.onrender.com",
+            "https://cryptoshield-backend-i83o.onrender.com",
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000"
+        ]
+    else:  # development
+        return [
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:3000"
+        ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,6 +87,18 @@ gps_shield = GPSAntiScamShield(db)
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok", "service": "CryptoShield Guardian AI"}
+
+@app.get("/health")
+async def health():
+    """Health check endpoint for Fly.io and monitoring systems"""
+    env = os.getenv("ENV", "development")
+    return {
+        "status": "healthy",
+        "service": "CryptoShield Guardian AI",
+        "version": "1.0.0",
+        "environment": env,
+        "timestamp": datetime.now().isoformat()
+    }
 
 
 @app.post("/api/users", response_model=User)
@@ -128,6 +173,127 @@ async def analyze_emotion(request: EmotionalAnalysisRequest):
         victim_vulnerability=analysis["victim_vulnerability"],
         manipulation_index=analysis["manipulation_index"],
     )
+
+
+@app.post("/api/analyze-text", response_model=AnalyzeTextResponse)
+async def analyze_text(request: AnalyzeTextRequest):
+    text = request.text or request.audio_text
+    if not text or not text.strip():
+        raise HTTPException(status_code=400, detail="Text or audio_text is required")
+    
+    try:
+        voice_result = voice_analysis_service.analyze_text(text)
+        emotional_result = emotional_analysis_service.analyze_emotion(text)
+        dark_patterns_result = dark_pattern_fingerprinter.detect_dark_patterns(text)
+        nationality_result = nationality_predictor.predict_nationality(text)
+        
+        scam_probability_normalized = voice_result.get("scam_probability", 0) / 100.0
+        
+        threat_result = threat_level_calculator.calculate_threat_level(
+            emotional_index=emotional_result.get("manipulation_index", 0),
+            manipulation_index=voice_result.get("manipulation_intensity", 0),
+            scam_pattern_match=voice_result.get("scam_probability", 0) > 50,
+            wallet_risk=0.0,
+            atm_proximity=False,
+            store_risk=0.0,
+            time_of_day_risk=0.0,
+            geolocation_overlap=False
+        )
+        
+        manipulation_timeline = []
+        if voice_result.get("manipulation_intensity", 0) > 10:
+            severity = "high" if voice_result["manipulation_intensity"] > 70 else "medium" if voice_result["manipulation_intensity"] > 40 else "low"
+            manipulation_timeline.append({
+                "timestamp": datetime.now().isoformat(),
+                "utterance": text[:100],
+                "interpretation": f"Manipulation intensity: {voice_result['manipulation_intensity']}%",
+                "severity": severity,
+                "type": "manipulation"
+            })
+        
+        if voice_result.get("urgency_score", 0) > 10:
+            severity = "high" if voice_result["urgency_score"] > 70 else "medium" if voice_result["urgency_score"] > 40 else "low"
+            manipulation_timeline.append({
+                "timestamp": datetime.now().isoformat(),
+                "utterance": text[:100],
+                "interpretation": f"Urgency detected: {voice_result['urgency_score']}%",
+                "severity": severity,
+                "type": "urgency"
+            })
+        
+        if emotional_result.get("fear_level", 0) > 30:
+            severity = "high" if emotional_result["fear_level"] > 70 else "medium" if emotional_result["fear_level"] > 40 else "low"
+            manipulation_timeline.append({
+                "timestamp": datetime.now().isoformat(),
+                "utterance": text[:100],
+                "interpretation": f"Fear spike detected: {emotional_result['fear_level']}%",
+                "severity": severity,
+                "type": "coercion"
+            })
+        
+        aggression_index = min(100, max(0, int(
+            (emotional_result.get("stress_level", 0) * 0.6 +
+             emotional_result.get("fear_level", 0) * 0.8 +
+             emotional_result.get("confusion_level", 0) * 0.5 +
+             emotional_result.get("manipulation_index", 0) * 0.2 +
+             emotional_result.get("compliance_probability", 0) * 0.2) / 2.3
+        )))
+        
+        risk_level = "extreme" if scam_probability_normalized >= 0.8 else "high" if scam_probability_normalized >= 0.6 else "medium" if scam_probability_normalized >= 0.4 else "low"
+        
+        primary_technique = "Intimidation" if emotional_result.get("fear_level", 0) > 60 else "Calm Manipulation" if emotional_result.get("manipulation_index", 0) > 60 else "Social Engineering"
+        
+        emotional_patterns = []
+        if emotional_result.get("stress_level", 0) > 30:
+            emotional_patterns.append("aggressive")
+        if emotional_result.get("fear_level", 0) > 30:
+            emotional_patterns.append("threatening")
+        if emotional_result.get("manipulation_index", 0) > 30:
+            emotional_patterns.append("manipulative")
+        
+        emotional_pattern = f"{', '.join(emotional_patterns)} tactics with {primary_technique.lower()}" if emotional_patterns else "High pressure with false authority"
+        
+        scammer_profile = {
+            "riskLevel": risk_level,
+            "archetype": voice_result.get("script_classification", "Social Engineer"),
+            "primaryTechnique": primary_technique,
+            "secondaryTechnique": "Urgency Tactics",
+            "emotionalPattern": emotional_pattern,
+            "aggressionIndex": aggression_index
+        }
+        
+        if threat_result["level"] in ["SEVERE", "HIGH"] or scam_probability_normalized >= 0.7:
+            suggested_action = "Freeze Mode"
+        elif threat_result["level"] in ["ELEVATED"]:
+            suggested_action = "Escalate/Verify"
+        else:
+            suggested_action = "Monitor"
+        
+        predicted_region = "Unknown"
+        if nationality_result.get("likely_origins"):
+            predicted_region = nationality_result["likely_origins"][0]["country"]
+        
+        return AnalyzeTextResponse(
+            scam_probability=scam_probability_normalized,
+            emotional_tone=emotional_result,
+            manipulation_timeline=manipulation_timeline,
+            dark_patterns=dark_patterns_result.get("pattern_list", []),
+            predicted_region=predicted_region,
+            threat_level=threat_result["level"],
+            scammer_profile=scammer_profile,
+            suggested_action=suggested_action,
+            raw={
+                "voice_analysis": voice_result,
+                "emotional_analysis": emotional_result,
+                "dark_patterns": dark_patterns_result,
+                "nationality": nationality_result,
+                "threat_calculation": threat_result
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error in analyze_text: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 @app.post("/api/wallet-risk", response_model=WalletRiskResponse)
