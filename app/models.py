@@ -17,7 +17,7 @@ class ScamScriptType(str, Enum):
     TECH_SUPPORT = "tech_support_scam"
     GRANDPARENT = "grandparent_emergency_scam"
     AMAZON_REFUND = "amazon_refund_scam"
-    ROMANCE = "romance_pig_butchering"
+    ROMANCE = "romance_scam"
     IMMIGRATION = "immigration_scam"
     SHERIFF = "sheriff_impersonation"
     BITCOIN_ATM = "bitcoin_atm_deposit_scam"
@@ -177,10 +177,13 @@ class GPSCheckResponse(BaseModel):
 
 
 class InterventionRequest(BaseModel):
-    call_id: str
     user_id: str
-    scam_probability: float
-    manipulation_index: float
+    call_id: Optional[str] = None
+    scam_probability: float = 0.0
+    manipulation_index: float = 0.0
+    scam_type: Optional[str] = None
+    threat_level: Optional[str] = None
+    victim_statement: Optional[str] = None
 
 
 class InterventionResponse(BaseModel):
@@ -188,6 +191,8 @@ class InterventionResponse(BaseModel):
     actions: List[str]
     alert_level: RiskLevel
     family_notified: bool
+    intervention_message: Optional[str] = None
+    recommended_actions: List[str] = []
 
 
 class ReportGenerationRequest(BaseModel):
@@ -231,3 +236,20 @@ class CancelSubscriptionRequest(BaseModel):
 class CancelSubscriptionResponse(BaseModel):
     success: bool
     message: str
+
+class AnalyzeTextRequest(BaseModel):
+    call_id: Optional[str] = None
+    user_id: Optional[str] = None
+    text: Optional[str] = None
+    audio_text: Optional[str] = None
+
+class AnalyzeTextResponse(BaseModel):
+    scam_probability: float
+    emotional_tone: dict
+    manipulation_timeline: list
+    dark_patterns: list
+    predicted_region: str
+    threat_level: str
+    scammer_profile: dict
+    suggested_action: str
+    raw: dict

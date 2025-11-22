@@ -16,7 +16,8 @@ from app.models import (
     ReportGenerationRequest, RiskLevel, ScamScriptType,
     SubscriptionTier, SubscriptionCheckRequest, SubscriptionCheckResponse,
     CreateSubscriptionRequest, CreateSubscriptionResponse,
-    CancelSubscriptionRequest, CancelSubscriptionResponse
+    CancelSubscriptionRequest, CancelSubscriptionResponse,
+    AnalyzeTextRequest, AnalyzeTextResponse
 )
 from app.database import db
 from app.ai_services import (
@@ -271,6 +272,34 @@ async def trigger_intervention(request: InterventionRequest):
     actions = []
     alert_level = RiskLevel.LOW
     family_notified = False
+    intervention_message = ""
+    recommended_actions = []
+    
+    scam_type = request.scam_type or ""
+    threat_level = request.threat_level or ""
+    
+    if "authority" in scam_type.lower() or "police" in scam_type.lower():
+        intervention_message = "⚠️ WARNING: Real law enforcement NEVER demands immediate payment over the phone. This is a classic scam tactic. Police, IRS, and government agencies do not call demanding gift cards, Bitcoin, or wire transfers. Hang up immediately."
+        recommended_actions = [
+            "Hang up the phone immediately",
+            "Do not provide any personal information",
+            "Do not make any payments",
+            "Report to local police or FTC at reportfraud.ftc.gov",
+            "Block this number"
+        ]
+        intervention_triggered = True
+        alert_level = RiskLevel.HIGH
+    elif "romance" in scam_type.lower() or "love" in scam_type.lower():
+        intervention_message = "⚠️ CAUTION: This appears to be love bombing - a classic romance scam manipulation tactic. Scammers use excessive affection and promises to build trust quickly before requesting money. Be very careful with anyone who professes strong feelings quickly and asks for financial help."
+        recommended_actions = [
+            "Slow down and take time to verify this person's identity",
+            "Never send money to someone you haven't met in person",
+            "Do reverse image searches on their photos",
+            "Talk to trusted friends or family about this relationship",
+            "Research romance scam warning signs"
+        ]
+        intervention_triggered = True
+        alert_level = RiskLevel.MEDIUM
     
     if request.scam_probability >= 85 or request.manipulation_index >= 80:
         intervention_triggered = True
@@ -281,6 +310,9 @@ async def trigger_intervention(request: InterventionRequest):
         actions.append("offer_auto_hangup")
         actions.append("lock_crypto_wallet_app")
         actions.append("trigger_emergency_mode")
+        
+        if not intervention_message:
+            intervention_message = "🚨 CRITICAL THREAT DETECTED: This call shows extremely high scam indicators. Hang up immediately and do not comply with any requests."
         
         user = db.get_user(request.user_id)
         if user and user.trusted_contacts:
@@ -296,25 +328,34 @@ async def trigger_intervention(request: InterventionRequest):
                 db.create_family_alert(family_alert)
             actions.append("family_notified")
         
-        db.update_call_event(request.call_id, {
-            "intervention_triggered": True,
-        })
+        if request.call_id:
+            db.update_call_event(request.call_id, {
+                "intervention_triggered": True,
+            })
     
     elif request.scam_probability >= 60 or request.manipulation_index >= 60:
         intervention_triggered = True
         alert_level = RiskLevel.HIGH
         actions.append("display_warning")
         actions.append("suggest_hang_up")
+        
+        if not intervention_message:
+            intervention_message = "⚠️ HIGH RISK: This call shows significant scam indicators. Exercise extreme caution."
     
     elif request.scam_probability >= 40:
         alert_level = RiskLevel.MEDIUM
         actions.append("display_caution_notice")
+        
+        if not intervention_message:
+            intervention_message = "⚠️ CAUTION: Some suspicious patterns detected. Stay alert."
     
     return InterventionResponse(
         intervention_triggered=intervention_triggered,
         actions=actions,
         alert_level=alert_level,
         family_notified=family_notified,
+        intervention_message=intervention_message,
+        recommended_actions=recommended_actions if recommended_actions else actions,
     )
 
 
@@ -424,16 +465,42 @@ async def predict_nationality(request: dict):
 
 @app.post("/api/threat-level")
 async def calculate_threat_level(request: dict):
-    threat_level = threat_level_calculator.calculate_threat_level(
-        emotional_index=request.get("emotional_index", 0),
-        manipulation_index=request.get("manipulation_index", 0),
-        scam_pattern_match=request.get("scam_pattern_match", False),
-        wallet_risk=request.get("wallet_risk", 0),
-        atm_proximity=request.get("atm_proximity", False),
-        store_risk=request.get("store_risk", 0),
-        time_of_day_risk=request.get("time_of_day_risk", 0),
-        geolocation_overlap=request.get("geolocation_overlap", False),
-    )
+    text = request.get("text", "")
+    
+    if text:
+        voice_analysis = voice_analysis_service.analyze_text(text)
+        emotional_analysis = emotional_analysis_service.analyze_emotion(text)
+        
+        emotional_index = emotional_analysis.get("manipulation_index", 0)
+        manipulation_index = voice_analysis.get("manipulation_intensity", 0)
+        scam_pattern_match = voice_analysis.get("scam_probability", 0) > 50
+        
+        threat_level = threat_level_calculator.calculate_threat_level(
+            emotional_index=emotional_index,
+            manipulation_index=manipulation_index,
+            scam_pattern_match=scam_pattern_match,
+            wallet_risk=request.get("wallet_risk", 0),
+            atm_proximity=request.get("atm_proximity", False),
+            store_risk=request.get("store_risk", 0),
+            time_of_day_risk=request.get("time_of_day_risk", 0),
+            geolocation_overlap=request.get("geolocation_overlap", False),
+        )
+        
+        threat_indicators = voice_analysis.get("manipulation_patterns", [])
+        threat_level["threat_indicators"] = threat_indicators
+    else:
+        threat_level = threat_level_calculator.calculate_threat_level(
+            emotional_index=request.get("emotional_index", 0),
+            manipulation_index=request.get("manipulation_index", 0),
+            scam_pattern_match=request.get("scam_pattern_match", False),
+            wallet_risk=request.get("wallet_risk", 0),
+            atm_proximity=request.get("atm_proximity", False),
+            store_risk=request.get("store_risk", 0),
+            time_of_day_risk=request.get("time_of_day_risk", 0),
+            geolocation_overlap=request.get("geolocation_overlap", False),
+        )
+        threat_level["threat_indicators"] = []
+    
     return threat_level
 
 

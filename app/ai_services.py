@@ -8,12 +8,14 @@ import random
 class VoiceAnalysisService:
     def __init__(self):
         self.scam_keywords = {
-            "urgency": ["immediately", "right now", "urgent", "hurry", "quickly", "don't wait", "time sensitive"],
-            "threat": ["arrest", "warrant", "police", "jail", "lawsuit", "legal action", "suspended", "frozen"],
+            "urgency": ["immediately", "right now", "urgent", "hurry", "quickly", "don't wait", "time sensitive", "today", "now", "must", "restricted", "restore access"],
+            "threat": ["arrest", "warrant", "police", "jail", "lawsuit", "legal action", "suspended", "frozen", "come", "consequences", "infected", "virus"],
             "isolation": ["don't tell anyone", "keep this secret", "don't hang up", "stay on the line", "don't talk to"],
-            "payment": ["bitcoin", "gift card", "wire transfer", "cash", "atm", "cryptocurrency", "western union", "moneygram"],
-            "authority": ["irs", "social security", "government", "federal", "sheriff", "officer", "agent", "department"],
-            "manipulation": ["help you", "protect you", "refund", "owe you", "won money", "selected", "verify"],
+            "payment": ["bitcoin", "gift card", "wire transfer", "cash", "atm", "cryptocurrency", "western union", "moneygram", "send", "money", "pay", "$", "dollar"],
+            "authority": ["irs", "social security", "government", "federal", "sheriff", "officer", "agent", "department", "paypal", "account"],
+            "manipulation": ["help you", "protect you", "refund", "owe you", "won money", "selected", "verify", "or else", "if you don't", "guaranteed", "triple", "double", "profit"],
+            "romance": ["love", "my love", "stuck", "overseas", "fly home", "darling", "sweetheart", "baby"],
+            "financial": ["investment", "opportunity", "return", "hours", "days", "guarantee", "profit", "earn", "make money"],
         }
         
         self.scam_patterns = {
@@ -22,7 +24,7 @@ class VoiceAnalysisService:
             ScamScriptType.TECH_SUPPORT: ["computer", "virus", "microsoft", "apple", "tech support", "windows", "security alert"],
             ScamScriptType.GRANDPARENT: ["grandson", "granddaughter", "grandchild", "accident", "bail", "emergency"],
             ScamScriptType.AMAZON_REFUND: ["amazon", "refund", "order", "purchase", "account suspended"],
-            ScamScriptType.ROMANCE: ["love", "relationship", "investment opportunity", "business deal", "meet in person"],
+            ScamScriptType.ROMANCE: ["love", "my love", "stuck", "overseas", "fly home", "relationship", "investment opportunity", "business deal", "meet in person"],
             ScamScriptType.IMMIGRATION: ["visa", "immigration", "deportation", "citizenship", "green card"],
             ScamScriptType.SHERIFF: ["sheriff", "local police", "county", "warrant for arrest"],
             ScamScriptType.BITCOIN_ATM: ["bitcoin atm", "crypto atm", "deposit bitcoin", "send cryptocurrency"],
@@ -47,7 +49,13 @@ class VoiceAnalysisService:
         manipulation_intensity = (keyword_scores.get("isolation", 0) + keyword_scores.get("manipulation", 0)) * 20
         manipulation_intensity = min(100, manipulation_intensity)
         
-        threat_detected = keyword_scores.get("threat", 0) > 0 or keyword_scores.get("urgency", 0) > 1
+        threat_detected = (
+            keyword_scores.get("threat", 0) > 0 or 
+            keyword_scores.get("urgency", 0) > 1 or
+            keyword_scores.get("manipulation", 0) > 1 or
+            keyword_scores.get("financial", 0) > 0 or
+            keyword_scores.get("romance", 0) > 0
+        )
         
         manipulation_patterns = []
         for category, score in keyword_scores.items():
@@ -79,9 +87,9 @@ class VoiceAnalysisService:
 
 class EmotionalAnalysisService:
     def __init__(self):
-        self.stress_indicators = ["um", "uh", "i don't know", "confused", "worried", "scared", "nervous"]
-        self.fear_indicators = ["afraid", "scared", "worried", "terrified", "panic", "help"]
-        self.compliance_indicators = ["okay", "yes", "i'll do it", "alright", "sure", "i understand"]
+        self.stress_indicators = ["um", "uh", "i don't know", "confused", "worried", "scared", "nervous", "if you don't", "you need to", "you must", "you have to"]
+        self.fear_indicators = ["afraid", "scared", "worried", "terrified", "panic", "help", "something bad", "bad is going", "going to happen", "will happen"]
+        self.compliance_indicators = ["okay", "yes", "i'll do it", "alright", "sure", "i understand", "don't worry", "trust me", "i'll take care", "take care of"]
     
     def analyze_emotion(self, text: str, tone_features: Optional[Dict[str, Any]] = None) -> Dict[str, float]:
         text_lower = text.lower()
@@ -91,15 +99,18 @@ class EmotionalAnalysisService:
         fear_level = self._calculate_fear(text_lower)
         compliance_probability = self._calculate_compliance(text_lower)
         tone_instability = self._calculate_tone_instability(text_lower, tone_features)
-        victim_vulnerability = (stress_level + fear_level + confusion_level) / 3
+        victim_vulnerability = max(
+            (stress_level + fear_level + confusion_level) / 3,
+            compliance_probability * 0.4
+        )
         
         manipulation_index = (
-            stress_level * 0.2 +
+            stress_level * 0.25 +
             confusion_level * 0.15 +
-            fear_level * 0.25 +
-            compliance_probability * 0.2 +
+            fear_level * 0.3 +
+            compliance_probability * 0.36 +
             tone_instability * 0.1 +
-            victim_vulnerability * 0.1
+            victim_vulnerability * 0.15
         )
         
         return {
@@ -114,7 +125,9 @@ class EmotionalAnalysisService:
     
     def _calculate_stress(self, text: str) -> float:
         count = sum(1 for indicator in self.stress_indicators if indicator in text)
-        return min(100, count * 25)
+        threat_words = ["must", "have to", "need to", "should", "immediately", "now", "today"]
+        threat_count = sum(1 for word in threat_words if word in text)
+        return min(100, (count * 25) + (threat_count * 15))
     
     def _calculate_confusion(self, text: str) -> float:
         confusion_words = ["confused", "don't understand", "what", "why", "how", "i don't know"]
@@ -123,11 +136,15 @@ class EmotionalAnalysisService:
     
     def _calculate_fear(self, text: str) -> float:
         count = sum(1 for indicator in self.fear_indicators if indicator in text)
-        return min(100, count * 30)
+        threat_indicators = ["police", "arrest", "warrant", "jail", "lawsuit", "consequences", "trouble"]
+        threat_count = sum(1 for word in threat_indicators if word in text)
+        return min(100, (count * 30) + (threat_count * 20))
     
     def _calculate_compliance(self, text: str) -> float:
         count = sum(1 for indicator in self.compliance_indicators if indicator in text)
-        return min(100, count * 15)
+        love_indicators = ["love", "baby", "darling", "sweetheart", "soulmate", "future together", "marry"]
+        love_count = sum(1 for word in love_indicators if word in text)
+        return min(100, (count * 15) + (love_count * 25))
     
     def _calculate_tone_instability(self, text: str, tone_features: Optional[Dict[str, Any]]) -> float:
         if tone_features:
@@ -293,11 +310,13 @@ class DarkPatternVoiceFingerprintingAI:
             "go_now": ["go now", "right now", "immediately", "hurry up", "go right away"],
             "keep_on_phone": ["stay with me", "don't leave", "keep talking", "stay on call"],
             "threat_tone": ["arrest", "warrant", "police", "jail", "legal action", "consequences"],
-            "false_authority": ["officer", "agent", "detective", "federal", "government official"],
+            "false_authority": ["officer", "agent", "detective", "federal", "government official", "irs", "social security", "department", "intelligence", "work with", "need to do", "exactly what i say"],
             "repetitive_pressure": ["again", "one more time", "repeat", "tell me again"],
             "cognitive_overload": ["quickly", "fast", "hurry", "no time", "urgent"],
             "fear_based": ["scared", "afraid", "worried", "danger", "risk", "threat"],
             "fake_badge": ["badge number", "agent id", "officer number", "federal id"],
+            "gaslighting": ["you're overreacting", "you're imagining", "nobody else", "you're crazy", "it's all in your head", "you're too sensitive", "that never happened", "you're being dramatic"],
+            "invalidation": ["overreacting", "problem with this except you", "nobody else has a problem", "just you", "only you"],
         }
     
     def detect_dark_patterns(self, text: str) -> Dict[str, Any]:
@@ -313,14 +332,16 @@ class DarkPatternVoiceFingerprintingAI:
                 pattern_scores[pattern_name] = score
         
         total_score = sum(pattern_scores.values())
-        overall_score = min(100, total_score * 15)
+        overall_score = min(100, total_score * 25)
         
         fingerprint_data = f"{text_lower}:{','.join(sorted(pattern_list))}"
         fingerprint_hash = hashlib.sha256(fingerprint_data.encode()).hexdigest()[:16]
         
         return {
+            "patterns": pattern_list,
             "pattern_list": pattern_list,
             "pattern_scores": pattern_scores,
+            "manipulation_score": overall_score,
             "overall_score": overall_score,
             "fingerprint_hash": fingerprint_hash,
         }
@@ -335,7 +356,7 @@ class ScammerNationalityPredictor:
                 "score_weight": 1.0,
             },
             "west_africa": {
-                "keywords": ["my dear", "beloved", "god bless", "i am contacting you"],
+                "keywords": ["my dear", "beloved", "god bless", "i am contacting you", "promise", "offshore", "contract", "return to you", "dear"],
                 "phoneme_markers": ["british english influence", "formal tone"],
                 "score_weight": 0.8,
             },
@@ -360,19 +381,38 @@ class ScammerNationalityPredictor:
         text_lower = text.lower()
         
         nationality_scores = {}
+        detected_markers = []
         
         for nationality, patterns in self.accent_patterns.items():
             score = 0
             for keyword in patterns["keywords"]:
                 if keyword in text_lower:
                     score += patterns["score_weight"] * 20
+                    detected_markers.append(keyword)
             
             if voice_features:
                 for marker in patterns["phoneme_markers"]:
                     if marker in voice_features.get("detected_markers", []):
                         score += patterns["score_weight"] * 15
+                        detected_markers.append(marker)
             
             nationality_scores[nationality] = min(100, score)
+        
+        best_nationality = max(nationality_scores.items(), key=lambda x: x[1]) if nationality_scores else ("unknown", 0)
+        best_region = best_nationality[0]
+        best_score = best_nationality[1]
+        
+        region_map = {
+            "india": "South Asia",
+            "west_africa": "West Africa",
+            "philippines": "Southeast Asia",
+            "eastern_europe": "Eastern Europe",
+            "china": "East Asia",
+            "unknown": None
+        }
+        
+        predicted_region = region_map.get(best_region, None)
+        confidence = min(100, best_score)
         
         total_score = sum(nationality_scores.values())
         if total_score > 0:
@@ -390,11 +430,13 @@ class ScammerNationalityPredictor:
         )[:3]
         
         return {
+            "predicted_region": predicted_region,
+            "confidence": confidence,
+            "linguistic_markers": detected_markers,
             "likely_origins": [
                 {"country": country.replace("_", " ").title(), "probability": prob}
                 for country, prob in sorted_nationalities
             ],
-            "confidence": "high" if sorted_nationalities[0][1] > 50 else "medium" if sorted_nationalities[0][1] > 30 else "low",
         }
 
 
@@ -414,47 +456,68 @@ class ThreatLevelCalculator:
         contributing_factors = []
         
         if emotional_index >= 80:
-            threat_score += 25
+            threat_score += 30
             contributing_factors.append("Critical emotional distress")
         elif emotional_index >= 60:
-            threat_score += 15
+            threat_score += 25
             contributing_factors.append("High emotional distress")
+        elif emotional_index >= 40:
+            threat_score += 20
+            contributing_factors.append("Moderate emotional distress")
+        elif emotional_index >= 10:
+            threat_score += 20
+            contributing_factors.append("Emotional indicators detected")
         
         if manipulation_index >= 80:
-            threat_score += 25
+            threat_score += 30
             contributing_factors.append("Severe manipulation detected")
         elif manipulation_index >= 60:
-            threat_score += 15
+            threat_score += 25
             contributing_factors.append("High manipulation detected")
+        elif manipulation_index >= 40:
+            threat_score += 20
+            contributing_factors.append("Moderate manipulation detected")
+        elif manipulation_index >= 5:
+            threat_score += 15
+            contributing_factors.append("Manipulation indicators detected")
         
         if scam_pattern_match:
-            threat_score += 20
+            threat_score += 60
             contributing_factors.append("Known scam pattern detected")
         
         if wallet_risk >= 75:
-            threat_score += 15
+            threat_score += 20
             contributing_factors.append("High-risk wallet detected")
+        elif wallet_risk >= 50:
+            threat_score += 10
+            contributing_factors.append("Moderate wallet risk")
         
         if atm_proximity:
-            threat_score += 10
+            threat_score += 15
             contributing_factors.append("Near Bitcoin ATM")
         
         if store_risk >= 80:
-            threat_score += 10
+            threat_score += 15
             contributing_factors.append("High-risk store proximity")
+        elif store_risk >= 50:
+            threat_score += 8
+            contributing_factors.append("Moderate store risk")
         
         if time_of_day_risk >= 70:
-            threat_score += 5
+            threat_score += 10
             contributing_factors.append("High-risk time period")
+        elif time_of_day_risk >= 40:
+            threat_score += 5
+            contributing_factors.append("Elevated time risk")
         
         if geolocation_overlap:
-            threat_score += 5
+            threat_score += 10
             contributing_factors.append("Location matches scam hotspot")
         
         threat_score = min(100, threat_score)
         
         if threat_score >= 80:
-            level = "SEVERE"
+            level = "CRITICAL"
             color = "black"
         elif threat_score >= 60:
             level = "HIGH"
@@ -470,6 +533,8 @@ class ThreatLevelCalculator:
             color = "green"
         
         return {
+            "threat_score": threat_score,
+            "risk_level": level.lower(),
             "level": level,
             "color": color,
             "score": threat_score,
