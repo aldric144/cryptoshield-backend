@@ -174,6 +174,43 @@ async def analyze_emotion(request: EmotionalAnalysisRequest):
     )
 
 
+@app.post("/api/analyze-text")
+async def analyze_text_endpoint(request: AnalyzeTextRequest):
+    """
+    Unified AI-powered scam intelligence scanner endpoint
+    Uses OpenAI GPT-4 for advanced threat analysis
+    """
+    from app.services.ai_scanner import analyze_text
+    
+    text = request.text or request.audio_text
+    if not text or not text.strip():
+        raise HTTPException(status_code=400, detail="Text or audio_text is required")
+    
+    try:
+        result = await analyze_text(text)
+        return result
+    except Exception as e:
+        logger.error(f"Error in analyze_text_endpoint: {str(e)}")
+        logger.error(traceback.format_exc())
+        return {
+            "error": str(e),
+            "danger_score": 0,
+            "risk_level": "UNKNOWN",
+            "scam_probability": 0.0,
+            "archetype": "Unknown",
+            "emotional_tone": {
+                "anger": 0.0,
+                "gaslighting": 0.0,
+                "seduction": 0.0,
+                "threatening": 0.0,
+                "calm_manipulation": 0.0
+            },
+            "manipulation_timeline": [],
+            "summary": f"Analysis failed: {str(e)}",
+            "recommended_actions": ["Check server logs for details"]
+        }
+
+
 @app.post("/api/wallet-risk", response_model=WalletRiskResponse)
 async def check_wallet_risk(request: WalletRiskRequest):
     analysis = wallet_risk_engine.analyze_wallet(request.wallet_address)
