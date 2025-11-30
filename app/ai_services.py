@@ -79,30 +79,42 @@ class VoiceAnalysisService:
 
 class EmotionalAnalysisService:
     def __init__(self):
-        self.stress_indicators = ["um", "uh", "i don't know", "confused", "worried", "scared", "nervous"]
-        self.fear_indicators = ["afraid", "scared", "worried", "terrified", "panic", "help"]
-        self.compliance_indicators = ["okay", "yes", "i'll do it", "alright", "sure", "i understand"]
+        self.anger_indicators = ["must", "have to", "need to", "should", "immediately", "now", "right now", "listen", "pay attention"]
+        self.threatening_indicators = ["arrest", "warrant", "police", "jail", "lawsuit", "consequences", "trouble", "suspended", "frozen", "legal action"]
+        self.gaslighting_indicators = ["confused", "don't understand", "listen carefully", "pay attention", "i told you", "you're not listening"]
+        self.calm_manipulation_indicators = ["help you", "protect you", "assist", "verify", "confirm", "just need to", "simply", "easy"]
+        self.seduction_indicators = ["love", "baby", "darling", "sweetheart", "special", "selected", "won", "prize", "opportunity"]
     
     def analyze_emotion(self, text: str, tone_features: Optional[Dict[str, Any]] = None) -> Dict[str, float]:
         text_lower = text.lower()
         
-        stress_level = self._calculate_stress(text_lower)
-        confusion_level = self._calculate_confusion(text_lower)
-        fear_level = self._calculate_fear(text_lower)
-        compliance_probability = self._calculate_compliance(text_lower)
-        tone_instability = self._calculate_tone_instability(text_lower, tone_features)
-        victim_vulnerability = (stress_level + fear_level + confusion_level) / 3
+        anger = self._calculate_anger(text_lower)
+        threatening = self._calculate_threatening(text_lower)
+        gaslighting = self._calculate_gaslighting(text_lower)
+        calm_manipulation = self._calculate_calm_manipulation(text_lower)
+        seduction = self._calculate_seduction(text_lower)
         
         manipulation_index = (
-            stress_level * 0.2 +
-            confusion_level * 0.15 +
-            fear_level * 0.25 +
-            compliance_probability * 0.2 +
-            tone_instability * 0.1 +
-            victim_vulnerability * 0.1
+            anger * 0.25 +
+            threatening * 0.30 +
+            gaslighting * 0.15 +
+            calm_manipulation * 0.15 +
+            seduction * 0.15
         )
         
+        stress_level = anger
+        fear_level = threatening
+        confusion_level = gaslighting
+        compliance_probability = seduction
+        tone_instability = min(100, (text.count("!") + text.count("?")) * 10)
+        victim_vulnerability = (stress_level + fear_level + confusion_level) / 3
+        
         return {
+            "anger": anger,
+            "threatening": threatening,
+            "gaslighting": gaslighting,
+            "calm_manipulation": calm_manipulation,
+            "seduction": seduction,
             "stress_level": stress_level,
             "confusion_level": confusion_level,
             "fear_level": fear_level,
@@ -112,30 +124,25 @@ class EmotionalAnalysisService:
             "manipulation_index": manipulation_index,
         }
     
-    def _calculate_stress(self, text: str) -> float:
-        count = sum(1 for indicator in self.stress_indicators if indicator in text)
-        return min(100, count * 25)
-    
-    def _calculate_confusion(self, text: str) -> float:
-        confusion_words = ["confused", "don't understand", "what", "why", "how", "i don't know"]
-        count = sum(1 for word in confusion_words if word in text)
-        return min(100, count * 20)
-    
-    def _calculate_fear(self, text: str) -> float:
-        count = sum(1 for indicator in self.fear_indicators if indicator in text)
-        return min(100, count * 30)
-    
-    def _calculate_compliance(self, text: str) -> float:
-        count = sum(1 for indicator in self.compliance_indicators if indicator in text)
+    def _calculate_anger(self, text: str) -> float:
+        count = sum(1 for indicator in self.anger_indicators if indicator in text)
         return min(100, count * 15)
     
-    def _calculate_tone_instability(self, text: str, tone_features: Optional[Dict[str, Any]]) -> float:
-        if tone_features:
-            return tone_features.get("instability", 50.0)
-        
-        question_marks = text.count("?")
-        exclamation_marks = text.count("!")
-        return min(100, (question_marks + exclamation_marks) * 10)
+    def _calculate_threatening(self, text: str) -> float:
+        count = sum(1 for indicator in self.threatening_indicators if indicator in text)
+        return min(100, count * 20)
+    
+    def _calculate_gaslighting(self, text: str) -> float:
+        count = sum(1 for indicator in self.gaslighting_indicators if indicator in text)
+        return min(100, count * 25)
+    
+    def _calculate_calm_manipulation(self, text: str) -> float:
+        count = sum(1 for indicator in self.calm_manipulation_indicators if indicator in text)
+        return min(100, count * 20)
+    
+    def _calculate_seduction(self, text: str) -> float:
+        count = sum(1 for indicator in self.seduction_indicators if indicator in text)
+        return min(100, count * 25)
 
 
 class WalletRiskEngine:
